@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-PASE 점수 자동 산출 프로그램</title>
+<!-- 한국어 가독성을 위한 Pretendard 서체 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+/* ============================================================
+   디자인 토큰 — 한양대 계열 딥블루 + 임상연구용 고가독성 UI
+   ============================================================ */
+:root{
+  --ink:#14243B;          /* 본문 잉크 */
+  --blue-900:#0B2E63;     /* 딥 네이비(헤더) */
+  --blue-700:#134A9C;     /* 주 브랜드 블루 */
+  --blue-500:#2D6BD0;     /* 인터랙션 블루 */
+  --blue-050:#EDF3FC;     /* 옅은 블루 배경 */
+  --paper:#F6F8FB;        /* 페이지 배경 */
+  --card:#FFFFFF;
+  --line:#D9E2EE;
+  --ok:#0E7A4F;           /* 완료/점수 그린 */
+  --warn:#B3261E;         /* 오류 레드 */
+  --gold:#C99514;         /* 총점 포인트 */
+  --radius:14px;
+  font-size:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:"Pretendard","Malgun Gothic",sans-serif;
+  background:var(--paper);color:var(--ink);
+  line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+/* ---------- 헤더 ---------- */
+header{
+  background:linear-gradient(135deg,var(--blue-900) 0%,var(--blue-700) 100%);
+  color:#fff;padding:34px 24px 30px;
+}
+.header-inner{max-width:1120px;margin:0 auto}
+.eyebrow{font-size:.78rem;letter-spacing:.14em;font-weight:600;opacity:.75;text-transform:uppercase}
+header h1{font-size:1.7rem;font-weight:800;margin-top:6px;letter-spacing:-.01em}
+header p{margin-top:8px;font-size:.92rem;opacity:.85;max-width:720px}
+/* ---------- 레이아웃 ---------- */
+.wrap{max-width:1120px;margin:26px auto 80px;padding:0 24px;
+  display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+/* ---------- 카드 ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px 24px;margin-bottom:18px}
+.section-tag{display:inline-block;background:var(--blue-050);color:var(--blue-700);
+  font-size:.75rem;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:99px;margin-bottom:10px}
+.card h2{font-size:1.08rem;font-weight:800;margin-bottom:4px}
+.card .sub{font-size:.84rem;color:#5A6B82;margin-bottom:14px}
+/* ---------- 문항 ---------- */
+.q{border-top:1px solid var(--line);padding:18px 0}
+.q:first-of-type{border-top:none;padding-top:6px}
+.q-title{font-weight:700;font-size:.95rem;margin-bottom:10px}
+.q-title .qnum{color:var(--blue-700);font-weight:800;margin-right:6px}
+.q-hint{font-size:.8rem;color:#6B7A90;margin:-6px 0 10px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{position:relative}
+.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt label{
+  display:inline-block;padding:8px 14px;border:1.5px solid var(--line);border-radius:10px;
+  font-size:.86rem;cursor:pointer;background:#fff;user-select:none;transition:all .12s;
+}
+.opt label:hover{border-color:var(--blue-500)}
+.opt input:checked+label{background:var(--blue-700);border-color:var(--blue-700);color:#fff;font-weight:700}
+.opt input:focus-visible+label{outline:3px solid var(--blue-500);outline-offset:2px}
+.followup{margin-top:12px;padding:12px 14px;background:var(--blue-050);border-radius:10px;display:none}
+.followup.show{display:block}
+.followup .fu-label{font-size:.84rem;font-weight:700;margin-bottom:8px;color:var(--blue-900)}
+.num-input{width:130px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;
+  font-size:.95rem;font-family:inherit}
+.num-input:focus{outline:2px solid var(--blue-500)}
+.id-input{width:100%;max-width:280px;padding:10px 12px;border:1.5px solid var(--line);
+  border-radius:10px;font-size:.95rem;font-family:inherit}
+/* ---------- 오류 ---------- */
+.err{display:none;margin-top:8px;font-size:.82rem;color:var(--warn);font-weight:600}
+.err.show{display:block}
+.q.has-err{border-left:3px solid var(--warn);padding-left:14px}
+/* ---------- 사이드 점수판 ---------- */
+.scoreboard{position:sticky;top:18px}
+.scoreboard .card{padding:20px}
+.sb-title{font-size:.8rem;font-weight:800;letter-spacing:.1em;color:var(--blue-700);margin-bottom:14px}
+.sb-row{display:flex;justify-content:space-between;align-items:baseline;
+  padding:9px 0;border-bottom:1px dashed var(--line);font-size:.88rem}
+.sb-row .val{font-variant-numeric:tabular-nums;font-weight:700}
+.sb-total{display:flex;justify-content:space-between;align-items:baseline;padding:14px 0 2px}
+.sb-total .lbl{font-weight:800}
+.sb-total .val{font-size:1.7rem;font-weight:800;color:var(--blue-900);font-variant-numeric:tabular-nums}
+.sb-note{font-size:.74rem;color:#6B7A90;margin-top:10px}
+.progress{height:6px;background:var(--blue-050);border-radius:99px;overflow:hidden;margin:12px 0 4px}
+.progress>div{height:100%;width:0%;background:var(--blue-500);transition:width .2s}
+.progress-lbl{font-size:.74rem;color:#6B7A90}
+/* ---------- 버튼 ---------- */
+.btn{display:inline-block;border:none;border-radius:12px;padding:13px 22px;
+  font-size:.95rem;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .12s}
+.btn:hover{filter:brightness(1.08)}
+.btn-primary{background:var(--blue-700);color:#fff;width:100%}
+.btn-ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink);width:100%;margin-top:10px}
+.btn-csv{background:var(--ok);color:#fff;width:100%;margin-top:10px;display:none}
+.btn-csv.show{display:inline-block}
+/* ---------- 결과 ---------- */
+#resultCard{display:none}
+#resultCard.show{display:block}
+table{width:100%;border-collapse:collapse;font-size:.86rem;margin-top:10px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{background:var(--blue-050);color:var(--blue-900);font-weight:700}
+th:nth-child(1),td:nth-child(1),th:nth-child(2),td:nth-child(2){text-align:left}
+tr.domain td{background:#F2F6FC;font-weight:700}
+tr.total td{background:var(--blue-900);color:#fff;font-weight:800;font-size:.95rem}
+tr.total td:first-child{border-radius:0 0 0 10px}
+tr.total td:last-child{border-radius:0 0 10px 0}
+.err-banner{display:none;background:#FDECEA;border:1px solid #F5C6C2;border-radius:12px;
+  padding:14px 16px;margin-bottom:16px;font-size:.86rem;color:var(--warn)}
+.err-banner.show{display:block}
+.err-banner ul{margin:6px 0 0 18px}
+footer{max-width:1120px;margin:0 auto;padding:0 24px 50px;font-size:.76rem;color:#7A8AA0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="eyebrow">Korean version of Physical Activity Scale for the Elderly</div>
+    <h1>K-PASE 점수 자동 산출 프로그램</h1>
+    <p>최명애 등(2010) 「한국판 노인 신체활동 측정도구(K-PASE)의 평가」 Appendix의 설문 문항과
+       PASE 점수계산표를 기준으로 문항별·영역별·총 점수를 자동 계산합니다. 개인 식별정보는 수집하지 않습니다.</p>
+  </div>
+</header>
+
+<div class="wrap">
+<!-- ==================== 좌측: 설문 입력 ==================== -->
+<main>
+
+  <div class="card">
+    <span class="section-tag">대상자 정보</span>
+    <h2>대상자 ID (선택)</h2>
+    <p class="sub">이름 등 개인 식별정보 대신 연구용 ID만 입력하십시오. 비워 두어도 계산됩니다.</p>
+    <input type="text" id="pid" class="id-input" placeholder="예: P-001" autocomplete="off">
+  </div>
+
+  <div class="card">
+    <span class="section-tag">참고 문항</span>
+    <h2>1. 좌식활동 (점수 미포함)</h2>
+    <p class="sub">지난 7일 동안 독서, TV 시청 등 앉아서 하는 활동 빈도 — K-PASE 총점 산출에는 포함되지 않으므로 본 프로그램에서는 입력을 받지 않습니다.</p>
+  </div>
+
+  <!-- ---------- 여가시간 활동 (2~6번) ---------- -->
+  <div class="card">
+    <span class="section-tag">영역 1 · 여가시간 활동</span>
+    <h2>문항 2 ~ 6</h2>
+    <p class="sub">지난 7일 동안의 활동 빈도를 선택하고, 하루 평균 활동 시간을 선택하십시오. 빈도가 "전혀 하지 않음"이면 시간 입력은 자동으로 건너뜁니다.</p>
+    <div id="leisureQs"><!-- JS로 생성 --></div>
+  </div>
+
+  <!-- ---------- 가사활동 (7~9번) ---------- -->
+  <div class="card">
+    <span class="section-tag">영역 2 · 가사활동</span>
+    <h2>문항 7 ~ 9</h2>
+    <p class="sub">지난 7일 동안 해당 활동을 하셨는지 "예 / 아니오"로 응답하십시오.</p>
+    <div id="houseQs"><!-- JS로 생성 --></div>
+  </div>
+
+  <!-- ---------- 일/자원봉사 (10번) ---------- -->
+  <div class="card">
+    <span class="section-tag">영역 3 · 일과 관련된 활동</span>
+    <h2>문항 10</h2>
+    <div class="q" id="q10" data-q="10">
+      <div class="q-title"><span class="qnum">10.</span>지난 7일 동안 보수를 받는 일이나 자원봉사로 일을 하셨습니까?</div>
+      <div class="opts">
+        <span class="opt"><input type="radio" name="q10" id="q10_no" value="0"><label for="q10_no">아니오</label></span>
+        <span class="opt"><input type="radio" name="q10" id="q10_yes" value="1"><label for="q10_yes">예</label></span>
+      </div>
+      <div class="followup" id="q10_follow">
+        <div class="fu-label">10a. 일주일에 몇 시간이나 보수를 받는 일 또는 자원봉사로 일을 하셨습니까?</div>
+        <input type="number" id="q10_hours" class="num-input" min="0" step="0.5" placeholder="시간/주"> <span style="font-size:.84rem">시간/주</span>
+        <div class="fu-label" style="margin-top:14px">10b. 직업/자원봉사 활동에 필요한 신체활동량으로 가장 잘 맞는 것은?</div>
+        <div class="opts">
+          <span class="opt"><input type="radio" name="q10b" id="q10b_1" value="1"><label for="q10b_1">1. 주로 앉아서 약간씩 팔만 움직이는 일</label></span>
+          <span class="opt"><input type="radio" name="q10b" id="q10b_2" value="2"><label for="q10b_2">2. 가끔 걸으면서 앉거나 서 있기</label></span>
+          <span class="opt"><input type="radio" name="q10b" id="q10b_3" value="3"><label for="q10b_3">3. 22.5kg 미만 물건 들고 걷기</label></span>
+          <span class="opt"><input type="radio" name="q10b" id="q10b_4" value="4"><label for="q10b_4">4. 22.5kg 이상 중노동과 걷기</label></span>
+        </div>
+        <p class="q-hint" style="margin-top:8px">활동 수준이 1(주로 앉아서 팔만 움직임)이면 근무시간이 있어도 10번 점수는 0점으로 처리됩니다.</p>
+      </div>
+      <div class="err" id="err_q10"></div>
+    </div>
+  </div>
+
+  <!-- ---------- 결과 ---------- -->
+  <div class="err-banner" id="errBanner"></div>
+
+  <div class="card" id="resultCard">
+    <span class="section-tag">산출 결과</span>
+    <h2>문항별 · 영역별 K-PASE 점수</h2>
+    <div id="resultTableWrap"></div>
+  </div>
+
+</main>
+
+<!-- ==================== 우측: 실시간 점수판 ==================== -->
+<aside class="scoreboard">
+  <div class="card">
+    <div class="sb-title">실시간 점수판</div>
+    <div class="sb-row"><span>여가시간 활동 (2~6)</span><span class="val" id="sb_leisure">–</span></div>
+    <div class="sb-row"><span>가사활동 (7~9)</span><span class="val" id="sb_house">–</span></div>
+    <div class="sb-row"><span>일/자원봉사 (10)</span><span class="val" id="sb_work">–</span></div>
+    <div class="sb-total"><span class="lbl">총 K-PASE 점수</span><span class="val" id="sb_total">–</span></div>
+    <div class="progress"><div id="progFill"></div></div>
+    <div class="progress-lbl"><span id="progText">0</span> / 12개 문항 응답 완료</div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="calculate(true)">점수 계산하기</button>
+      <button class="btn btn-csv" id="csvBtn" onclick="downloadCSV()">CSV로 저장</button>
+      <button class="btn btn-ghost" onclick="resetAll()">전체 초기화</button>
+    </div>
+    <p class="sb-note">득점 가능 범위 0~360점 · 점수가 높을수록 신체활동량이 많음을 의미합니다.</p>
+  </div>
+</aside>
+</div>
+
+<footer>
+  출처: 최명애, 김증임, 전미양, 채영란 (2010). 한국판 노인 신체활동 측정도구(K-PASE)의 평가.
+  여성건강간호학회지, 16(1), 47–59. 원 도구: Washburn et al. (1993) PASE.
+</footer>
+
+<script>
+/* ============================================================
+   1) 고정 상수 — 논문 Appendix PASE 점수계산표 기준
+   ============================================================ */
+
+// 문항별 가중치 (dictionary로 관리)
+const WEIGHTS = {
+  "2": 20, "3": 21, "4": 23, "5": 23, "6": 30,
+  "7": 25, "8": 25,
+  "9a": 30, "9b": 36, "9c": 20, "9d": 35,
+  "10": 21
+};
+
+// 활동명
+const NAMES = {
+  "2":"집밖으로 산책", "3":"가벼운 운동/여가활동", "4":"중등도 운동/여가활동",
+  "5":"힘든 운동/여가활동", "6":"근력/근지구력 운동",
+  "7":"가벼운 집안일", "8":"힘든 집안일 또는 허드렛일",
+  "9a":"집안 수리", "9b":"잔디나 마당일", "9c":"실외 정원 가꾸기", "9d":"타인 돌보기",
+  "10":"직업적 일 또는 자원봉사"
+};
+
+// "하루당 시간" 환산표: HOURS_PER_DAY[활동빈도][활동시간] (table로 관리)
+// 활동빈도: 0=전혀 안 함, 1=아주 드물게(1~2일), 2=가끔(3~4일), 3=자주(5~7일)
+// 활동시간: 1=1시간 미만, 2=1~2시간 미만, 3=2~4시간, 4=4시간 이상
+const HOURS_PER_DAY = {
+  1: {1:0.11, 2:0.32, 3:0.64, 4:1.07},
+  2: {1:0.25, 2:0.75, 3:1.50, 4:2.50},
+  3: {1:0.43, 2:1.29, 3:2.57, 4:4.29}
+};
+
+const FREQ_LABELS = ["전혀 하지 않음","아주 드물게 (1~2일)","가끔 (3~4일)","자주 (5~7일)"];
+const TIME_LABELS = {1:"1시간 미만",2:"1~2시간 미만",3:"2~4시간",4:"4시간 이상"};
+
+// 여가시간 문항(2~6) 정의
+const LEISURE_QS = [
+  {id:"2", text:"지난 7일 동안 집밖이나 정원에서 산책을 얼마나 자주 하셨습니까? (운동 삼아, 재미로, 걸어서 출근, 개와 산책 등)"},
+  {id:"3", text:"지난 7일 동안 수영(물놀이), 낚시, 약수터 오르기 등 가벼운 운동이나 여가활동에 얼마나 자주 참여하셨습니까?"},
+  {id:"4", text:"지난 7일 동안 복식 테니스, 볼룸댄스, 스케이팅, 빠른 걸음 걷기 등 중등도 운동이나 여가활동에 얼마나 자주 참여하셨습니까?"},
+  {id:"5", text:"지난 7일 동안 조깅, 단식 테니스, 에어로빅 댄스, 등산, 자전거 타기 등 힘든 운동이나 여가활동에 얼마나 자주 참여하셨습니까?"},
+  {id:"6", text:"지난 7일 동안 역기·아령, 팔굽혀펴기, 노젓기 운동 등 근력과 지구력을 향상시키는 운동을 얼마나 자주 하셨습니까?"}
+];
+
+// 가사활동 문항(7, 8, 9a~9d) 정의 — 예/아니오
+const HOUSE_QS = [
+  {id:"7",  num:"7.",  text:"지난 7일 동안 먼지 털기나 설거지 같은 가벼운 집안일을 하신 적이 있었습니까?"},
+  {id:"8",  num:"8.",  text:"지난 7일 동안 청소, 걸레질, 창문 닦기, 나무운반 같은 힘든 집안일 또는 허드렛일을 하신 적이 있었습니까?"},
+  {id:"9a", num:"9a.", text:"페인트칠, 벽 도배, 전기작업 등과 같은 집안 수리 및 화초 가꾸기를 하셨습니까?"},
+  {id:"9b", num:"9b.", text:"눈 치우기, 낙엽 치우기, 장작 패기 등을 포함한 잔디나 마당에서 하는 일을 하셨습니까?"},
+  {id:"9c", num:"9c.", text:"실외 정원 가꾸기(주말 농장 포함)를 하셨습니까?"},
+  {id:"9d", num:"9d.", text:"어린이, 도움이 필요한 배우자나 다른 사람 등 타인을 돌보셨습니까?"}
+];
+
+/* ============================================================
+   2) 입력 UI 동적 생성
+   ============================================================ */
+function buildLeisure(){
+  const box = document.getElementById("leisureQs");
+  box.innerHTML = LEISURE_QS.map(q => `
+    <div class="q" id="q${q.id}" data-q="${q.id}">
+      <div class="q-title"><span class="qnum">${q.id}.</span>${q.text}</div>
+      <div class="opts">
+        ${FREQ_LABELS.map((lb,i)=>`
+          <span class="opt">
+            <input type="radio" name="q${q.id}_freq" id="q${q.id}_f${i}" value="${i}">
+            <label for="q${q.id}_f${i}">${i} = ${lb}</label>
+          </span>`).join("")}
+      </div>
+      <div class="followup" id="q${q.id}_follow">
+        <div class="fu-label">${q.id}b. 하루 평균 활동 시간은 어느 정도였습니까?</div>
+        <div class="opts">
+          ${[1,2,3,4].map(t=>`
+            <span class="opt">
+              <input type="radio" name="q${q.id}_time" id="q${q.id}_t${t}" value="${t}">
+              <label for="q${q.id}_t${t}">${t} = ${TIME_LABELS[t]}</label>
+            </span>`).join("")}
+        </div>
+      </div>
+      <div class="err" id="err_q${q.id}"></div>
+    </div>`).join("");
+}
+
+function buildHouse(){
+  const box = document.getElementById("houseQs");
+  box.innerHTML = HOUSE_QS.map(q => `
+    <div class="q" id="q${q.id}" data-q="${q.id}">
+      <div class="q-title"><span class="qnum">${q.num}</span>${q.text}</div>
+      <div class="opts">
+        <span class="opt"><input type="radio" name="q${q.id}" id="q${q.id}_no" value="0"><label for="q${q.id}_no">아니오</label></span>
+        <span class="opt"><input type="radio" name="q${q.id}" id="q${q.id}_yes" value="1"><label for="q${q.id}_yes">예</label></span>
+      </div>
+      <div class="err" id="err_q${q.id}"></div>
+    </div>`).join("");
+}
+
+/* ============================================================
+   3) 계산 로직 (UI와 분리된 순수 함수)
+   ============================================================ */
+
+// 여가시간 문항(2~6) 점수: 하루당 시간 × 가중치
+function leisureScore(qid, freq, time){
+  if(freq === 0) return 0;                     // 전혀 하지 않음 → 0점
+  const hpd = HOURS_PER_DAY[freq][time];        // 환산표 적용
+  return hpd * WEIGHTS[qid];
+}
+
+// 가사활동 문항(7,8,9a~9d) 점수: 응답값(0/1) × 가중치
+function houseScore(qid, yes){
+  return (yes ? 1 : 0) * WEIGHTS[qid];
+}
+
+// 10번 문항 점수: (주당 근무시간/7) × 21, 단 미근무 또는 10b=1이면 0점
+function workScore(worked, hours, level){
+  if(!worked) return 0;
+  if(level === 1) return 0;                     // 주로 앉아서 팔만 움직임 → 0점
+  return (hours / 7) * WEIGHTS["10"];
+}
+
+// 활동 빈도 수치(표 출력용): 여가=하루당 시간, 가사=0/1, 일=시간/7
+function freqValue(qid, state){
+  if(["2","3","4","5","6"].includes(qid)){
+    if(state.freq === 0) return 0;
+    if(state.freq == null || state.time == null) return null;
+    return HOURS_PER_DAY[state.freq][state.time];
+  }
+  return null;
+}
+
+/* ============================================================
+   4) 입력 수집 + 검증 (한국어 오류 메시지)
+   ============================================================ */
+function readInput(name){
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? parseInt(el.value,10) : null;
+}
+
+function collectAndValidate(){
+  const errors = [];
+  const data = {leisure:{}, house:{}, work:{}};
+  document.querySelectorAll(".err").forEach(e=>{e.classList.remove("show");e.textContent="";});
+  document.querySelectorAll(".q").forEach(q=>q.classList.remove("has-err"));
+
+  const mark = (qid,msg)=>{
+    errors.push(`문항 ${qid}: ${msg}`);
+    const e=document.getElementById("err_q"+qid), q=document.getElementById("q"+qid);
+    if(e){e.textContent=msg;e.classList.add("show");}
+    if(q){q.classList.add("has-err");}
+  };
+
+  // 여가시간 활동 2~6
+  for(const q of LEISURE_QS){
+    const freq = readInput(`q${q.id}_freq`);
+    const time = readInput(`q${q.id}_time`);
+    if(freq === null){ mark(q.id,"활동 빈도 응답이 누락되었습니다. 0~3 중 하나를 선택해 주십시오."); continue; }
+    if(freq === 0 && time !== null){ mark(q.id,"활동 빈도가 '전혀 하지 않음'인 경우 활동 시간은 입력할 수 없습니다. (시간 선택이 해제됩니다)"); }
+    if(freq >= 1 && time === null){ mark(q.id,"활동 빈도를 선택하셨으므로 하루 평균 활동 시간을 반드시 선택해 주십시오."); continue; }
+    data.leisure[q.id] = {freq, time: freq===0 ? null : time};
+  }
+
+  // 가사활동 7~9
+  for(const q of HOUSE_QS){
+    const v = readInput(`q${q.id}`);
+    if(v === null){ mark(q.id,"'예' 또는 '아니오' 응답이 누락되었습니다."); continue; }
+    data.house[q.id] = v;
+  }
+
+  // 일/자원봉사 10
+  const worked = readInput("q10");
+  const hoursRaw = document.getElementById("q10_hours").value.trim();
+  const level = readInput("q10b");
+  if(worked === null){
+    mark("10","'예' 또는 '아니오' 응답이 누락되었습니다.");
+  } else if(worked === 0){
+    if(hoursRaw !== "") mark("10","일을 하지 않았다고 응답하셨으므로 근무시간을 입력할 수 없습니다.");
+    data.work = {worked:false, hours:0, level:null};
+  } else {
+    const hours = hoursRaw === "" ? null : parseFloat(hoursRaw);
+    if(hours === null) mark("10","주당 근무시간이 누락되었습니다. 시간을 입력해 주십시오.");
+    else if(isNaN(hours)) mark("10","주당 근무시간은 숫자로 입력해 주십시오.");
+    else if(hours < 0) mark("10","주당 근무시간은 음수가 될 수 없습니다.");
+    else if(hours > 168) mark("10","주당 근무시간은 168시간을 초과할 수 없습니다.");
+    if(level === null) mark("10","활동 수준(10b)이 누락되었습니다. 1~4 중 하나를 선택해 주십시오.");
+    data.work = {worked:true, hours: (hours!==null && !isNaN(hours) && hours>=0 && hours<=168) ? hours : null, level};
+  }
+
+  return {errors, data};
+}
+
+/* ============================================================
+   5) 계산 실행 + 결과 표 렌더링
+   ============================================================ */
+let lastResult = null; // CSV 저장용
+
+function calculate(showErrors){
+  const {errors, data} = collectAndValidate();
+  const banner = document.getElementById("errBanner");
+  const resultCard = document.getElementById("resultCard");
+  const csvBtn = document.getElementById("csvBtn");
+
+  if(errors.length){
+    if(showErrors){
+      banner.innerHTML = "<strong>입력을 확인해 주십시오.</strong><ul>"+errors.map(e=>`<li>${e}</li>`).join("")+"</ul>";
+      banner.classList.add("show");
+      resultCard.classList.remove("show");
+      csvBtn.classList.remove("show");
+      banner.scrollIntoView({behavior:"smooth",block:"center"});
+    }
+    lastResult = null;
+    return null;
+  }
+  banner.classList.remove("show");
+
+  // ----- 문항별 점수 -----
+  const rows = [];
+  let leisureSum=0, houseSum=0;
+
+  for(const q of LEISURE_QS){
+    const st = data.leisure[q.id];
+    const fv = st.freq===0 ? 0 : HOURS_PER_DAY[st.freq][st.time];
+    const score = leisureScore(q.id, st.freq, st.time);
+    leisureSum += score;
+    rows.push({qid:q.id, name:NAMES[q.id], fv, w:WEIGHTS[q.id], score});
+  }
+  for(const q of HOUSE_QS){
+    const yes = data.house[q.id];
+    const score = houseScore(q.id, yes===1);
+    houseSum += score;
+    rows.push({qid:q.id, name:NAMES[q.id], fv:yes, w:WEIGHTS[q.id], score});
+  }
+  const w = data.work;
+  const workFv = (!w.worked || w.level===1) ? 0 : w.hours/7;
+  const workSum = workScore(w.worked, w.hours ?? 0, w.level);
+  rows.push({qid:"10", name:NAMES["10"], fv:workFv, w:WEIGHTS["10"], score:workSum});
+
+  const total = leisureSum + houseSum + workSum;
+  lastResult = {rows, leisureSum, houseSum, workSum, total,
+                pid:document.getElementById("pid").value.trim(), data};
+
+  // ----- 결과 표 -----
+  const f2 = n => n.toFixed(2);
+  document.getElementById("resultTableWrap").innerHTML = `
+    <table>
+      <thead><tr><th>문항</th><th>활동명</th><th>활동 빈도 수치</th><th>가중치</th><th>점수</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr><td>${r.qid}</td><td>${r.name}</td><td>${f2(r.fv)}</td><td>${r.w}</td><td>${f2(r.score)}</td></tr>`).join("")}
+        <tr class="domain"><td colspan="4">여가시간 활동 점수 (문항 2~6)</td><td>${f2(leisureSum)}점</td></tr>
+        <tr class="domain"><td colspan="4">가사활동 점수 (문항 7~9)</td><td>${f2(houseSum)}점</td></tr>
+        <tr class="domain"><td colspan="4">일/자원봉사 활동 점수 (문항 10)</td><td>${f2(workSum)}점</td></tr>
+        <tr class="total"><td colspan="4">총 K-PASE 점수</td><td>${f2(total)}점</td></tr>
+      </tbody>
+    </table>`;
+  document.getElementById("resultCard").classList.add("show");
+  csvBtn.classList.add("show");
+  if(showErrors) document.getElementById("resultCard").scrollIntoView({behavior:"smooth",block:"start"});
+  return lastResult;
+}
+
+/* ============================================================
+   6) 실시간 점수판 (응답 완료된 문항만 반영)
+   ============================================================ */
+function liveUpdate(){
+  let leisure=0, house=0, work=0, answered=0;
+  let leisureOk=false, houseOk=false, workOk=false;
+
+  for(const q of LEISURE_QS){
+    const f=readInput(`q${q.id}_freq`), t=readInput(`q${q.id}_time`);
+    if(f===0){ answered++; leisureOk=true; }
+    else if(f!==null && t!==null){ leisure+=leisureScore(q.id,f,t); answered++; leisureOk=true; }
+  }
+  for(const q of HOUSE_QS){
+    const v=readInput(`q${q.id}`);
+    if(v!==null){ house+=houseScore(q.id,v===1); answered++; houseOk=true; }
+  }
+  const worked=readInput("q10");
+  if(worked===0){ answered++; workOk=true; }
+  else if(worked===1){
+    const h=parseFloat(document.getElementById("q10_hours").value);
+    const lv=readInput("q10b");
+    if(!isNaN(h)&&h>=0&&lv!==null){ work=workScore(true,h,lv); answered++; workOk=true; }
+  }
+
+  const f2=n=>n.toFixed(2);
+  document.getElementById("sb_leisure").textContent = leisureOk? f2(leisure):"–";
+  document.getElementById("sb_house").textContent   = houseOk?   f2(house):"–";
+  document.getElementById("sb_work").textContent    = workOk?    f2(work):"–";
+  document.getElementById("sb_total").textContent   = (leisureOk||houseOk||workOk)? f2(leisure+house+work):"–";
+  document.getElementById("progFill").style.width = (answered/12*100)+"%";
+  document.getElementById("progText").textContent = answered;
+}
+
+/* ============================================================
+   7) 이벤트 바인딩: 조건부 표시 / 자동 건너뛰기
+   ============================================================ */
+function bindEvents(){
+  // 여가 문항: 빈도 0이면 시간 선택 숨김 + 기존 시간 선택 해제(자동 0점 처리)
+  for(const q of LEISURE_QS){
+    document.querySelectorAll(`input[name="q${q.id}_freq"]`).forEach(r=>{
+      r.addEventListener("change",()=>{
+        const fu=document.getElementById(`q${q.id}_follow`);
+        if(parseInt(r.value,10)===0){
+          fu.classList.remove("show");
+          document.querySelectorAll(`input[name="q${q.id}_time"]`).forEach(t=>t.checked=false);
+        } else fu.classList.add("show");
+        liveUpdate();
+      });
+    });
+    document.querySelectorAll(`input[name="q${q.id}_time"]`).forEach(r=>r.addEventListener("change",liveUpdate));
+  }
+  // 가사 문항
+  for(const q of HOUSE_QS){
+    document.querySelectorAll(`input[name="q${q.id}"]`).forEach(r=>r.addEventListener("change",liveUpdate));
+  }
+  // 10번: '아니오'면 하위문항 숨김 + 값 초기화
+  document.querySelectorAll('input[name="q10"]').forEach(r=>{
+    r.addEventListener("change",()=>{
+      const fu=document.getElementById("q10_follow");
+      if(r.value==="1"){ fu.classList.add("show"); }
+      else{
+        fu.classList.remove("show");
+        document.getElementById("q10_hours").value="";
+        document.querySelectorAll('input[name="q10b"]').forEach(t=>t.checked=false);
+      }
+      liveUpdate();
+    });
+  });
+  document.getElementById("q10_hours").addEventListener("input",liveUpdate);
+  document.querySelectorAll('input[name="q10b"]').forEach(r=>r.addEventListener("change",liveUpdate));
+}
+
+/* ============================================================
+   8) CSV 다운로드 (연구용 데이터 저장 — 개인 식별정보 미포함)
+   ============================================================ */
+function downloadCSV(){
+  if(!lastResult){ alert("먼저 '점수 계산하기'를 실행해 주십시오."); return; }
+  const r = lastResult, f2=n=>n.toFixed(2);
+  const today = new Date().toISOString().slice(0,10);
+  const lines = [];
+  lines.push(["대상자ID","산출일","문항","활동명","활동 빈도 수치","가중치","점수"].join(","));
+  r.rows.forEach(row=>{
+    lines.push([r.pid||"", today, row.qid, `"${row.name}"`, f2(row.fv), row.w, f2(row.score)].join(","));
+  });
+  lines.push([r.pid||"", today, "영역","여가시간 활동 점수","","",f2(r.leisureSum)].join(","));
+  lines.push([r.pid||"", today, "영역","가사활동 점수","","",f2(r.houseSum)].join(","));
+  lines.push([r.pid||"", today, "영역","일/자원봉사 활동 점수","","",f2(r.workSum)].join(","));
+  lines.push([r.pid||"", today, "총점","총 K-PASE 점수","","",f2(r.total)].join(","));
+  // 엑셀에서 한글이 깨지지 않도록 UTF-8 BOM 추가
+  const blob = new Blob(["\uFEFF"+lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `K-PASE_${r.pid||"결과"}_${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================
+   9) 초기화
+   ============================================================ */
+function resetAll(){
+  if(!confirm("모든 응답을 초기화하시겠습니까?")) return;
+  document.querySelectorAll("input[type=radio]").forEach(r=>r.checked=false);
+  document.getElementById("q10_hours").value="";
+  document.getElementById("pid").value="";
+  document.querySelectorAll(".followup").forEach(f=>f.classList.remove("show"));
+  document.querySelectorAll(".err").forEach(e=>{e.classList.remove("show");e.textContent="";});
+  document.querySelectorAll(".q").forEach(q=>q.classList.remove("has-err"));
+  document.getElementById("errBanner").classList.remove("show");
+  document.getElementById("resultCard").classList.remove("show");
+  document.getElementById("csvBtn").classList.remove("show");
+  lastResult=null;
+  liveUpdate();
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+// ----- 초기 구동 -----
+buildLeisure();
+buildHouse();
+bindEvents();
+liveUpdate();
+</script>
+</body>
+</html>
